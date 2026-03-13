@@ -2,10 +2,7 @@ package helper
 
 import (
 	"fmt"
-
-    "crypto/rand"
-    "fmt"
-    "errors"
+	"crypto/rand"
 )
 
 
@@ -13,7 +10,7 @@ import (
 func UUID16(key string) (string, error) {
 	keylen := len(key)
     if keylen < 1 {
-        return "", errors.New("Error: Empty key.")
+        return "", fmt.Errorf("Error: Empty key.")
     }
 
 	if keylen > 16 {
@@ -23,12 +20,12 @@ func UUID16(key string) (string, error) {
 	keybuff:= make([]byte, keylen)
     keybuff = []byte(key)
     if _, err := rand.Read(keybuff); err != nil {
-		return "", errors.New("Error: Error while reading key. Actual error: %s", err.Error())
+		return "", fmt.Errorf("Error: Error while reading key. Actual error: %s", err.Error())
     }
 
 	uuidbuff := make([]byte, uuid_len_32)
 	if _, err := rand.Read(uuidbuff); err != nil {
-		return "", errors.New("Error: Error while reading uuid. Actual error: %s", err.Error())
+		return "", fmt.Errorf("Error: Error while reading uuid. Actual error: %s", err.Error())
     }
 
 	for i, j := 0, RandomInt(0, uuid_len_32 - keylen); i < keylen; i++ {
