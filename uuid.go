@@ -6,11 +6,10 @@ import (
     "crypto/rand"
     "fmt"
     "errors"
-
-    "server/appdata"
 )
 
 
+// Returns a 32 bit random key based on the input key.
 func UUID16(key string) (string, error) {
 	keylen := len(key)
     if keylen < 1 {

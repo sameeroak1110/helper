@@ -1,0 +1,201 @@
+package helper
+
+import (
+	//"fmt"
+	//"github.com/sameeroak1110/logger"
+
+	serverCache "server/cache"
+	"server/appdata"
+)
+
+
+// bitwise oring src and bitval results the following:
+// equals to src in case bitval (all zeors except one specific position) bit is set in src.
+// > src in case bitval (all zeors except one specific position) bit is not set in src.
+func IsBitSet(src int, bit int) bool {
+	//return (src | bitval) == src
+	val := src & (1 << (bit - 1))
+    return (val > 0)
+}
+
+func Set(src int, bitval int) int {
+	return src | bitval
+}
+func SetKthBit(src int, bitval int) int {
+	return src | (1 << (bitval - 1))
+}
+
+func Reset(src int, bitval int) int {
+	return src ^ bitval
+}
+func ResetKthBit(src int, bitval int) int {
+	// #define DEVICE_CLR_BIT_IS_DISCOVERED(pdev, if_idx)    (((pdev)->is_discovered) &= (~(1 << (if_idx))))
+	//n &= ^(1 << pos)
+	//n &= ^(1 << (k - 1))
+	src &= ^(1 << (bitval - 1))
+	return src
+}
+
+func IsProfileComplete(src int, fullmask int) bool {
+	return (src | fullmask) == src
+	//return false
+}
+
+// appdata.FULL_PROFILE_AADHAAR_MASK => 15391
+// appdata.FULL_PROFILE_GOVID_MASK   => 15591
+// appdata.FULL_PROFILE_GST_MASK     => 16135
+func IsUserProfileComplete(userCacheRec serverCache.UserCacheRec, verbStr string) (sectionsIncomplete []int, currentProfile int, isProfileComplete bool) {
+	sectionsIncomplete = make([]int, 6)
+	isProfileComplete = false
+	currentProfile = userCacheRec.CurrentProfile
+	isBasic := false
+	isGST := false
+	isAadhaar := false
+	isGovID := false
+	isAddr := false
+	isEmailID := false
+
+	//if currentProfile < 7 {
+	sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_BASIC_DATA] = 1
+	if (IsBitSet(currentProfile, appdata.USER_PROFILE_PERSONAL_INFO_BIT) == true) &&
+		(IsBitSet(currentProfile, appdata.USER_PROFILE_PERSONAL_INFO_IMAGE_BIT) == true) {
+		//(IsBitSet(currentProfile, appdata.USER_PROFILE_PERSONAL_INFO_ALT_CONTACT_BIT) == true) {
+		// if individual: b1: dob, gender,     b2: image, b3: alt-name, alt-relation, alt-mobile, alt-emailID
+		// if org       : b1: org-type, about, b2: image, b3: poc-name, mobile, designation, emailID
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_BASIC_DATA] = 0
+		//isProfileComplete = true
+		isBasic = true
+	}
+
+	if userCacheRec.IsOrg {
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_GST_DATA] = 1  // 768 GST: 0 000 11 000 00 000
+		if (IsBitSet(currentProfile, appdata.USER_PROFILE_GST_VERIFY_BIT) == true) &&
+			(IsBitSet(currentProfile, appdata.USER_PROFILE_GST_DOC_BIT) == true) {
+			sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_GST_DATA] = 0
+			//isProfileComplete = true
+			isGST = true
+		}
+	} else {
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_AADHAAR_DATA] = 1  //   24 aadhaar: 0 000 00 000 11 000
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_GOVID_DATA] = 1    //  224 expat  : 0 000 00 111 00 000
+
+		if (IsBitSet(currentProfile, appdata.USER_PROFILE_GOVID_AADHAAR_VERIFY_BIT) == true) &&
+			(IsBitSet(currentProfile, appdata.USER_PROFILE_GOVID_AADHAAR_IMAGE_BIT) == true) {
+			sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_AADHAAR_DATA] = 0
+			//isProfileComplete = true
+			isAadhaar = true
+		}
+		if (IsBitSet(currentProfile, appdata.USER_PROFILE_GOVID_VERIFY_BIT) == true) &&
+			(IsBitSet(currentProfile, appdata.USER_PROFILE_GOVID_DATA_BIT) == true) &&
+			(IsBitSet(currentProfile, appdata.USER_PROFILE_GOVID_DOC1_BIT) == true) {
+			sectionsIncomplete[appdata.USER_PROFILE_SECTION_ID_GOVID_DATA] = 0
+			//isProfileComplete = true
+			isGovID = true
+		}
+	}
+	sectionsIncomplete[appdata.USER_PROFILE_SECTION_ADDR_DATA] = 1        // 7168 address: 0 111 00 000 00 000
+	if (IsBitSet(currentProfile, appdata.USER_PROFILE_ADDR_CURRENT_BIT) == true) &&
+		(IsBitSet(currentProfile, appdata.USER_PROFILE_ADDR_PERMANENT_BIT) == true) &&
+		(IsBitSet(currentProfile, appdata.USER_PROFILE_ADDR_CORRESPONDENCE_BIT) == true) {
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_ADDR_DATA] = 0
+		//isProfileComplete = true
+		isAddr = true
+	}
+
+	sectionsIncomplete[appdata.USER_PROFILE_SECTION_EMAIL_VERIFIED] = 1  // 8192: email: 1 000 00 000 00 000
+	/* if IsBitSet(currentProfile, appdata.USER_PROFILE_EMAIL_VERIFY_BIT) == true {
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_EMAIL_VERIFIED] = 0
+		isProfileComplete = true
+	} */
+	if (IsBitSet(currentProfile, appdata.USER_PROFILE_EMAIL_VERIFY_BIT) == true) &&
+		(IsBitSet(currentProfile, appdata.USER_PROFILE_PERSONAL_INFO_ALT_CONTACT_BIT) == true) {
+		sectionsIncomplete[appdata.USER_PROFILE_SECTION_EMAIL_VERIFIED] = 0
+		//isProfileComplete = true
+		isEmailID = true
+	}
+
+	if (isBasic == true) && ((isGST == true) || ((isAadhaar == true) || (isGovID == true))) && (isAddr == true) && (isEmailID == true) {
+		isProfileComplete = true
+	}
+
+	return sectionsIncomplete, currentProfile, isProfileComplete
+}
+
+
+// profile completeness function header:
+// 1> customer-profile:
+//helper.IsCustomerProfileComplete(<customerID>) (bool, error)
+//returns true if customer profile is complete
+/* func IsCustomerProfileComplete(userCacheRec serverCache.UserCacheRec, verbStr string) (bool, error) {
+	switch userCacheRec.IsOrg {  // org
+		case false:  // non-org, ie, individual
+		switch userCacheRec.IsExpat {
+			case true:  // non-org foreign citizen
+			if appdata.FULL_PROFILE_INDIVIDUAL_GOVID_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_NONORG_EXPAT + verbStr)
+			}
+			break
+
+			case false: // non-org indian citizen
+			if appdata.FULL_PROFILE_INDIVIDUAL_AADHAAR_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_NONORG_INDIAN + verbStr)
+			}
+			break
+		}
+		case true:  // org
+		switch userCacheRec.IsExpat {
+			case true:  // org foreign citizen
+			if appdata.FULL_PROFILE_GST_GOVID_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_ORG_EXPAT + verbStr)
+			}
+			break
+
+			case false: // org indian citizen
+			if appdata.FULL_PROFILE_GST_AADHAAR_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_ORG_INDIAN + verbStr)
+			}
+			break
+		}
+	}
+
+	return true, nil
+}
+
+
+// 2> host-profile:
+//helper.IsHostProfileComplete(<customerID>) (bool, error)
+//returns true if host profile is complete
+func IsHostProfileComplete(userCacheRec serverCache.UserCacheRec, verbStr string) (bool, error) {
+	switch userCacheRec.IsOrg {  // org
+		case false:  // non-org, ie, individual
+		switch userCacheRec.IsExpat {
+			case true:  // non-org foreign citizen
+			if appdata.FULL_PROFILE_INDIVIDUAL_GOVID_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_NONORG_EXPAT + verbStr)
+			}
+			break
+
+			case false: // non-org indian citizen
+			if appdata.FULL_PROFILE_INDIVIDUAL_AADHAAR_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_NONORG_INDIAN + verbStr)
+			}
+			break
+		}
+		case true:  // org
+		switch userCacheRec.IsExpat {
+			case true:  // org foreign citizen
+			if appdata.FULL_PROFILE_GST_GOVID_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_ORG_EXPAT + verbStr)
+			}
+			break
+
+			case false: // org indian citizen
+			if appdata.FULL_PROFILE_GST_AADHAAR_MASK > userCacheRec.CurrentProfile {
+				return false, fmt.Errorf(appdata.USER_PROFILE_INCOMPLETE_ORG_INDIAN + verbStr)
+			}
+			break
+		}
+	}
+
+	return true, nil
+} */
