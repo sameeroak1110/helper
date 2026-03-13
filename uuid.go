@@ -39,10 +39,10 @@ func UUID16(key string) (string, error) {
 
 
 func UUID32(key string) (string, error) {
-	return uuid, nil
+	return "", nil
 }
 
 
 func UUID64(key string) (string, error) {
-	return uuid, nil
+	return "", nil
 }
